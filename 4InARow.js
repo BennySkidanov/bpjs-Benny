@@ -18,6 +18,8 @@
  Connect Four is a solved game. The first player can always win by playing the right moves.
  */ 
  
+bp.log.info("Connect Four - Let's Go!!");
+ 
 StaticEvents = {
 	'RedWin':bp.Event("RedWin"),
 	'YellowWin':bp.Event("YellowWin"),
@@ -27,7 +29,7 @@ StaticEvents = {
 // Game ends when : 1. Either of the players has won ( Red or Yellow ) 2. It's a draw
 bp.registerBThread("EndOfGame", function() {
 	bp.sync({ waitFor:[ StaticEvents.RedWin, StaticEvents.YellowWin, StaticEvents.Draw ] });
-	bp.sync({ block:[ redES, yellowES, redESCoin, yellowESCoin ] });
+	bp.sync({ block:[ redMovesES, yellowMovesES ] });
 });
 
 
@@ -44,7 +46,6 @@ bp.registerBThread("DetectDraw", function() {
 function putInColRed(col) {
 	return bp.Event( "RedCol" + "(" + col + ")");
 }
-
 function putInColYellow(col) {
 	return bp.Event( "YellowCol" + "(" + col + ")");
 }
@@ -73,12 +74,20 @@ const yellowESCoin = bp.EventSet( "Yellow moves", function(evt){
     return evt.name.startsWith("YellowCoin");
 });
 
+const redMovesES = bp.EventSet( "Red moves", function(evt){
+    return evt.name.startsWith("RedCoin") || evt.name.startsWith("RedCol")  ;
+});
+const yellowMovesES = bp.EventSet( "Red moves", function(evt){
+    return evt.name.startsWith("YellowCoin") || evt.name.startsWith("YellowCol")  ;
+});
 
 // Represents alternating turns as mentioned in the game rules 
 bp.registerBThread("EnforceTurns", function() {
 	while (true) {
-		bp.sync({ waitFor:redES, block: yellowES});
-		bp.sync({ waitFor:yellowES, block: redES});
+		bp.sync({ waitFor:yellowES, block: redMovesES});
+		bp.sync({ waitFor:yellowESCoin, block: [redMovesES, yellowES]});
+		bp.sync({ waitFor:redES, block: yellowMovesES});	
+		bp.sync({ waitFor:redESCoin, block: [yellowMovesES, redES]});	
 	}
 });
 
@@ -90,10 +99,10 @@ function colSpectator ( column ) {
 				var e = bp.sync( { waitFor : [ putInColRed(column) , putInColYellow(column) ] } );
 				// bp.log.info(e.name); // Debug
 				if ( e.name.startsWith("RedCol") ) {
-					bp.sync( { request : [ putCoinRed(i, column) ] , block: yellowES } , 90 );
+					bp.sync( { request : [ putCoinRed(i, column) ] , block: yellowMovesES } , 60 );
 				}
 				else {
-					bp.sync( { request : [ putCoinYellow(i, column) ] , block : redES} , 90 );
+					bp.sync( { request : [ putCoinYellow(i, column) ] , block : redMovesES} , 60 );
 				}
 			}
 			while (true) {
@@ -142,34 +151,37 @@ function addLinePermutationBthreads(l, p) {
 		}
 	});
 
-/*	
+	
 	// Red player can win in the next move 
 	bp.registerBThread("MoveToWinRed(<" + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
-		while (true) {
 			
 			bp.sync({ waitFor:[ putCoinRed (l[p[0]].x, l[p[0]].y) ] });
 
 			bp.sync({ waitFor:[ putCoinRed(l[p[1]].x, l[p[1]].y) ] });
 
 			bp.sync({ waitFor:[ putCoinRed (l[p[2]].x, l[p[2]].y) ] });
+			
+			bp.log.info("Red - One move to Win!");
 
-			bp.sync({ request:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] }, 50);
-		}
+			// bp.sync({ request:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] }, 80);
+			bp.sync({ request: putInColRed(l[p[3]].y)}, 85);
 	});
 
 	// Red player can prevent yellow player from winning in the next move 
 	bp.registerBThread("PreventYellowFromWinning(<"  + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
-		while (true) {
 			bp.sync({ waitFor:[ putCoinYellow(l[p[0]].x, l[p[0]].y) ] });
 
 			bp.sync({ waitFor:[ putCoinYellow(l[p[1]].x, l[p[1]].y) ] });
 			
 			bp.sync({ waitFor:[ putCoinYellow(l[p[2]].x, l[p[2]].y) ] });
+			
+			bp.log.info("Red - Prevent opponent win!!" + " (" + l[p[3]].x + "," + l[p[3]].y + ")" );
 
-			bp.sync({ request:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] }, 40);
-		}
+			//bp.sync({ request:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] }, 70);
+		
+			bp.sync({ request:putInColRed(l[p[3]].y)}, 80);
 	});
-	*/
+	
 }
 
 
@@ -207,12 +219,69 @@ lines.forEach(function(l) {
 
 bp.registerBThread("CenterColYellow", function() {
 	while (true) {
-		bp.sync({ request:[ putInColYellow(2) ] }, 35);
+		bp.sync({ request:[ putInColYellow(3) ] }, 40);
 	}
 });
 bp.registerBThread("CenterColRed", function() {
 	while (true) {
-		bp.sync({ request:[ putInColRed(3) ] }, 35);
+		bp.sync({ request:[ putInColRed(3) ] }, 40);
 	}
 });
 
+bp.registerBThread("semiCenterColYellow", function() {
+	while (true) {
+		bp.sync({ request:[ putInColYellow(1),putInColYellow(2), putInColYellow(4), putInColYellow(5) ] }, 25);
+	}
+});
+bp.registerBThread("semiCenterColRed", function() {
+	while (true) {
+		bp.sync({ request:[ putInColRed(1),putInColRed(2), putInColRed(4), putInColRed(5) ] }, 25);
+	}
+});
+
+bp.registerBThread("sideColYellow", function() {
+	while (true) {
+		bp.sync({ request:[ putInColYellow(0), putInColYellow(6) ] }, 10);
+	}
+});
+bp.registerBThread("sideColRed", function() {
+	while (true) {
+		bp.sync({ request:[ putInColRed(0), putInColRed(6) ] }, 10);
+	}
+});
+
+var board = [
+  ['*', '*','*', '*','*', '*','*'],
+  
+  ['*', '*','*', '*','*', '*','*'],
+  
+  ['*', '*','*', '*','*', '*','*'],
+  
+  ['*', '*','*', '*','*', '*','*'],
+  
+  ['*', '*','*', '*','*', '*','*'],
+  
+  ['*', '*','*', '*','*', '*','*'],
+];
+
+bp.registerBThread("boardUpdate", function() {
+	for(var i=0; i < 42; i++) {
+		var e = bp.sync({ waitFor:[ redESCoin, yellowESCoin ]});
+		if(e.name.startsWith("Red")) {
+			let row = e.name.charCodeAt(8) - 48;
+			let col = e.name.charCodeAt(10) - 48;
+			board[row][col] = 'R';
+		}
+		else {
+			let row = e.name.charCodeAt(11) - 48;
+			let col = e.name.charCodeAt(13) - 48;
+			bp.log.info("row - " + row + ", " + "col - " + col);
+			board[row][col] = 'Y';
+		}
+		// print board
+		
+		for(var i = 0; i < 6; i++) {
+			bp.log.info(board[i][0] + "  " + board[i][1] + "  " + board[i][2] + "  " + board[i][3] + "  " + board[i][4] + "  " + board[i][5] + "  " + board[i][6]);
+		}
+	}
+});
