@@ -82,11 +82,34 @@ const AnyPut = bp.EventSet("Any Put", function(evt) {
 	return evt.name.startsWith("Put");
 });
 
-function generatePutEventSet(col) {
+/*function generatePutEventSet(col) {
 	return bp.EventSet("Any Put in Col " + col, function(evt) {
-		evt.name.startsWith("Put") && evt.data.col === col;
+		evt.name.startsWith("Put") && evt.data.col == col;
 	});
-}
+}*/ 
+
+const col0ES =  bp.EventSet("Any Put 0", function(evt) {
+	return evt.name.startsWith("Put") && evt.data.col == 0.0;
+});
+const col1ES =  bp.EventSet("Any Put 1", function(evt) {
+	return evt.name.startsWith("Put") && evt.data.col == 1.0;
+});
+const col2ES =  bp.EventSet("Any Put 2", function(evt) {
+	return evt.name.startsWith("Put") && evt.data.col == 2.0;
+});
+const col3ES =  bp.EventSet("Any Put 3", function(evt) {
+	return evt.name.startsWith("Put") && evt.data.col == 3.0;
+});
+const col4ES =  bp.EventSet("Any Put 4", function(evt) {
+	return evt.name.startsWith("Put") && evt.data.col == 4.0;
+});
+const col5ES =  bp.EventSet("Any Put 5", function(evt) {
+	return evt.name.startsWith("Put") && evt.data.col == 5.0;
+});
+const col6ES =  bp.EventSet("Any Put 6", function(evt) {
+	return evt.name.startsWith("Put") && evt.data.col == 6.0;
+});
+
 
 // req1: Represents alternating turns as mentioned in the game rules 
 bp.registerBThread("EnforceTurns", function() {
@@ -100,29 +123,38 @@ bp.registerBThread("EnforceTurns", function() {
 
 //req2: physics - after put in a col, the coin falls to the first available place
 bp.registerBThread("put in col" , function() { 
-	let columns = [ 0 , 0 , 0 , 0 , 0 , 0 , 0 ];
+	let columns = [ 5 , 5 , 5 , 5 , 5 , 5 , 5 ];
 	while(true) {
 		let e = bp.sync({waitFor: AnyPut });
-		bp.sync({request: putCoin( columns[e.data.col]++ , e.data.col, e.data.color)});
+		bp.sync({request: putCoin( columns[e.data.col]-- , e.data.col, e.data.color)});
 	}
 });
 
 //req3: one cannot put a coin in a full column
-/*function blockPutInFullColumn(col){
+function blockPutInFullColumn(col){
 	bp.registerBThread("one cannot put a coin in a full column " + col , function() { 
-		
+        let es = col == 0 ? col0ES :
+        col == 1 ? col1ES : 
+        col == 2 ? col2ES : 
+        col == 3 ? col3ES : 
+        col == 4 ? col4ES : 
+        col == 5 ? col5ES :
+        col == 6 ? col6ES : null ;
+
 		for(let i = 0; i < 6; i++) {
-			bp.sync({waitFor: generatePutEventSet(col) })
-		}
-		bp.sync({block: generatePutEventSet(col)})
-	})
+            bp.sync({ waitFor: es });
+        }
+        while(true) {
+		    bp.sync({ block: es });
+        }
+    })
 }
 
 let j = 0; 
 for( j=0; j < 7; j++ ) 
 {
 	blockPutInFullColumn(j);
-}*/
+}
 
 //req4: if a player places 4 coins in a line - the player wins
 let allFours=[]
@@ -206,7 +238,6 @@ function colSpectator ( column ) {
 			}
 		});			
 }
-
 let j = 0; 
 for( j=0; j < 7; j++ ) 
 {
@@ -215,84 +246,64 @@ for( j=0; j < 7; j++ )
 */
 /*
 function addLinePermutationBthreads(l, p) {
-
 	// Represents when Red wins
 	bp.registerBThread("DetectRedWin(<" + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
 		while (true) {
 			bp.sync({ waitFor:[ putCoinRed (l[p[0]].x, l[p[0]].y) ] });
-
 			bp.sync({ waitFor:[ putCoinRed(l[p[1]].x, l[p[1]].y) ] });
-
 			bp.sync({ waitFor:[ putCoinRed(l[p[2]].x, l[p[2]].y) ] });
 			
 			bp.sync({ waitFor:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] });
-
 			bp.sync({ request:[ StaticEvents.RedWin ],  block:[ redES, yellowES, redESCoin, yellowESCoin ] }, 100);
-
 		}
 	});
-
 	// Represents when O wins
 	bp.registerBThread("DetectYellowWin(<" + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
 		while (true) {
 			bp.sync({ waitFor:[ putCoinYellow (l[p[0]].x, l[p[0]].y) ] });
-
 			bp.sync({ waitFor:[ putCoinYellow(l[p[1]].x, l[p[1]].y) ] });
-
 			bp.sync({ waitFor:[ putCoinYellow (l[p[2]].x, l[p[2]].y) ] });
 			
 			bp.sync({ waitFor:[ putCoinYellow (l[p[3]].x, l[p[3]].y) ] });
-
 			bp.sync({ request:[ StaticEvents.YellowWin ] ,  block:[ redES, yellowES, redESCoin, yellowESCoin ] }, 100);
-
 		}
 	});
-
 	
 	// Red player can win in the next move 
 	bp.registerBThread("MoveToWinRed(<" + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
 			
 			bp.sync({ waitFor:[ putCoinRed (l[p[0]].x, l[p[0]].y) ] });
-
 			bp.sync({ waitFor:[ putCoinRed(l[p[1]].x, l[p[1]].y) ] });
-
 			bp.sync({ waitFor:[ putCoinRed (l[p[2]].x, l[p[2]].y) ] });
 			
 			bp.log.info("Red - One move to Win!");
-
 			// bp.sync({ request:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] }, 80);
 			bp.sync({ request: putInColRed(l[p[3]].y)}, 85);
 	});
-
 	// Red player can prevent yellow player from winning in the next move 
 	bp.registerBThread("PreventYellowFromWinning(<"  + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
 			bp.sync({ waitFor:[ putCoinYellow(l[p[0]].x, l[p[0]].y) ] });
-
 			bp.sync({ waitFor:[ putCoinYellow(l[p[1]].x, l[p[1]].y) ] });
 			
 			bp.sync({ waitFor:[ putCoinYellow(l[p[2]].x, l[p[2]].y) ] });
 			
 			bp.log.info("Red - Prevent opponent win!!" + " (" + l[p[3]].x + "," + l[p[3]].y + ")" );
-
 			//bp.sync({ request:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] }, 70);
 		
 			bp.sync({ request:putInColRed(l[p[3]].y)}, 80);
 	});
 	
 }
-
 */
 
 /*
 var lines = [];
-
 for(var i = 0; i < 3; i++ ) { 
 	for(var j = 0; j < 4; j++) {
 		lines.push( [ { x : i, y : j } , { x : i, y : j+1 } , { x : i, y : j+2 } , { x : i, y : j+3 } ] );
 		lines.push( [ { x : i, y : j } , { x : i + 1, y : j } , { x : i + 2, y : j } , { x : i + 3, y : j } ] );
 	}
 }
-
 for(var i = 0; i < 6; i++ ) { 
 	for(var j = 0; j < 4; j++) {
 		if( i <= 2 && j <= 3 ) {
@@ -303,19 +314,15 @@ for(var i = 0; i < 6; i++ ) {
 		}
 	}
 }
-
-
 var perms = [ [ 0, 1, 2, 3 ], [ 0, 1, 3, 2 ], [ 0, 2, 1, 3 ], [ 0, 2, 3, 1 ], [ 0, 3, 1, 2 ], [ 0, 3, 2, 1 ],
               [ 1, 0, 2, 3 ], [ 1, 0, 3, 2 ], [ 1, 2, 0, 3 ], [ 1, 2, 3, 0 ], [ 1, 3, 0, 2 ], [ 1, 3, 2, 0 ],
 			  [ 2, 1, 0, 3 ], [ 2, 1, 3, 0 ], [ 2, 0, 1, 3 ], [ 2, 0, 3, 1 ], [ 2, 3, 1, 0 ], [ 2, 3, 0, 1 ],
 			  [ 3, 1, 2, 0 ], [ 3, 1, 0, 2 ], [ 3, 2, 1, 0 ], [ 3, 2, 0, 1 ], [ 3, 0, 1, 2 ], [ 3, 0, 2, 1 ]];
-
 lines.forEach(function(l) {
 	perms.forEach(function(p) {
 		addLinePermutationBthreads(l, p);
 	});
 });
-
 */
  
 
@@ -336,7 +343,7 @@ bp.registerBThread("semiCenterCol", function() {
 bp.registerBThread("sideCol", function() {
 	while (true) {
 		bp.sync({ request:[ putInCol(0, "Yellow"),putInCol(6, "Yellow"),
-							putInCol(0, "Red"),putInCol(0, "Red")     ] });
+							putInCol(0, "Red"),putInCol(6, "Red")     ] });
 	}
 });
 
