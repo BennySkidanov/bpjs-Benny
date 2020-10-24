@@ -29,17 +29,17 @@ StaticEvents = {
 // Game ends when : 1. Either of the players has won ( Red or Yellow ) 2. It's a draw
 bp.registerBThread("EndOfGame", function() {
 	bp.sync({ waitFor:[ StaticEvents.RedWin, StaticEvents.YellowWin, StaticEvents.Draw ] });
-	bp.sync({ block:[ redMovesES, yellowMovesES ] });
+	bp.sync({ block:[ moves ] });
 });
 
 bp.registerBThread("DetectDraw", function() {
-	for (var i=0; i< 42; i++) { bp.sync({ waitFor:[ moves ] }); }
+	for (var i=0; i< 42; i++) { bp.sync({ waitFor:[ yellowCoinEs, redCoinEs ] }); }
 	bp.sync({ request:[ StaticEvents.Draw ] }, 90);
 });
 
 
 var moves = bp.EventSet("Move events", function(e) {
-	return e.name.startsWith("Red") || e.name.startsWith("Yellow");
+	return e.name.startsWith("Put") || e.name.startsWith("Coin");
 });
 
 
@@ -70,23 +70,9 @@ const yellowCoinEs = bp.EventSet( "Yellow moves", function(evt){
     return evt.name.startsWith("Coin Yellow");
 });
 
-const redMovesES = bp.EventSet( "Red moves", function(evt){
-    return evt.data.color.equals("Red");
-});
-
-const yellowMovesES = bp.EventSet( "Yellow moves", function(evt){
-    return evt.data.color.equals("Yellow");
-});
-
 const AnyPut = bp.EventSet("Any Put", function(evt) {
 	return evt.name.startsWith("Put");
 });
-
-/*function generatePutEventSet(col) {
-	return bp.EventSet("Any Put in Col " + col, function(evt) {
-		evt.name.startsWith("Put") && evt.data.col == col;
-	});
-}*/ 
 
 const col0ES =  bp.EventSet("Any Put 0", function(evt) {
 	return evt.name.startsWith("Put") && evt.data.col == 0.0;
@@ -114,10 +100,10 @@ const col6ES =  bp.EventSet("Any Put 6", function(evt) {
 // req1: Represents alternating turns as mentioned in the game rules 
 bp.registerBThread("EnforceTurns", function() {
 	while (true) {
-		bp.sync({ waitFor:yellowColES, block: redMovesES});
-		bp.sync({ waitFor:yellowCoinEs, block: [redMovesES, yellowColES]});
-		bp.sync({ waitFor:redColES, block: yellowMovesES});	
-		bp.sync({ waitFor:redCoinEs, block: [yellowMovesES, redColES]});	
+		bp.sync({ waitFor:yellowColES, block: [yellowCoinEs, redColES, redCoinEs]});
+		bp.sync({ waitFor:yellowCoinEs, block: [redColES, redCoinEs, yellowColES]});
+		bp.sync({ waitFor:redColES, block: [yellowColES, yellowCoinEs, redCoinEs]});	
+		bp.sync({ waitFor:redCoinEs, block: [redColES, yellowCoinEs, yellowColES]});	
 	}
 });
 
@@ -157,173 +143,262 @@ for( j=0; j < 7; j++ )
 }
 
 //req4: if a player places 4 coins in a line - the player wins
-let allFours=[]
-
-/*
-for(let i=0; i<4; i++) {
-	for(let j=0; j<2; j++){
-		var row=[]
-		var col=[]
-		var diag1=[]
-		var diag2=[]
-		for(let x=0; x<4; x++){
-			row.push({row:i, col:j})
-			col.push
-		}
-		allFours.push(row)
-	}
-}
-*/
-
-for(var i = 0; i < 3; i++ ) { 
-	for(var j = 0; j < 4; j++) {
-		allFours.push( [ { row : i, col : j } , { row : i, col : j+1 } , { row : i, col : j+2 } , { row : i, col : j+3 } ] );
-		allFours.push( [ { row : i, col : j } , { row : i + 1, col : j } , { row : i + 2, col : j } , { row : i + 3, col : j } ] );
-	}
-}
-
-for(var i = 0; i < 6; i++ ) { 
-	for(var j = 0; j < 4; j++) {
-		if( i <= 2 && j <= 3 ) {
-			allFours.push( [ { row : i, col : j } , { row : i + 1, col : j+1 } , { row : i + 2, col : j+2 } , { row : i + 3, col : j+3 } ] );
-		}
-		else {
-			allFours.push( [ { row : i, col : j } , { row : i - 1, col : j+1 } , { row : i - 2, col : j+2 } , { row : i - 3, col : j+3 } ] );
-		}
-	}
-}
-
-
-//rules for fours
-allFours.forEach(four =>
-		bp.registerBThread("Detect yellow win" , function() { 
-			let coinOfFour = four.map(cell => putCoin(cell.row,cell.col,"Yellow")); // This is an array of 4 coin placemmt - in order to win one have to fill all 4 
-			for(var i = 0; i < 4; i++) {
-				bp.sync({waitFor: coinOfFour[i]})
-			}
-			bp.sync({request:StaticEvents.YellowWin, block: generatePutEventSet(col)})
-		})
-)
-
-
-allFours.forEach(four =>
-		bp.registerBThread("Detect Red win" , function() { 
-			let coinOfFour = four.map(cell => putCoin(cell.row,cell.col,"Red")); // This is an array of 4 coin placemmt - in order to win one have to fill all 4 
-			for(var i = 0; i < 4; i++) {
-				bp.sync({waitFor: coinOfFour[i]})
-			}
-			bp.sync({request:StaticEvents.RedWin, block: generatePutEventSet(col)})
-		})
-)
-
-
-
-
-/*
-// when the CPU or the player wants to make a move, we need to ensure the coin placement is the deepest possible in the column  
-function colSpectator ( column ) {
-		bp.registerBThread("placemmt in column " + column , function() { 
-			for( var i = 5; i >= 0 ; i-- ) {
-				var e = bp.sync( { waitFor : [ putInColRed(column) , putInColYellow(column) ] } );
-				// bp.log.info(e.name); // Debug
-				if ( e.name.startsWith("RedCol") ) {
-					bp.sync( { request : [ putCoinRed(i, column) ] , block: yellowMovesES } , 60 );
-				}
-				else {
-					bp.sync( { request : [ putCoinYellow(i, column) ] , block : redMovesES} , 60 );
-				}
-			}
-			while (true) {
-				bp.sync( { block : [ putInColRed(column) , putInColYellow(column) ] } );
-			}
-		});			
-}
-let j = 0; 
-for( j=0; j < 7; j++ ) 
-{
-	colSpectator(j);
-}
-*/
-/*
-function addLinePermutationBthreads(l, p) {
-	// Represents when Red wins
-	bp.registerBThread("DetectRedWin(<" + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
-		while (true) {
-			bp.sync({ waitFor:[ putCoinRed (l[p[0]].x, l[p[0]].y) ] });
-			bp.sync({ waitFor:[ putCoinRed(l[p[1]].x, l[p[1]].y) ] });
-			bp.sync({ waitFor:[ putCoinRed(l[p[2]].x, l[p[2]].y) ] });
-			
-			bp.sync({ waitFor:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] });
-			bp.sync({ request:[ StaticEvents.RedWin ],  block:[ redES, yellowES, redESCoin, yellowESCoin ] }, 100);
-		}
-	});
-	// Represents when O wins
-	bp.registerBThread("DetectYellowWin(<" + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
-		while (true) {
-			bp.sync({ waitFor:[ putCoinYellow (l[p[0]].x, l[p[0]].y) ] });
-			bp.sync({ waitFor:[ putCoinYellow(l[p[1]].x, l[p[1]].y) ] });
-			bp.sync({ waitFor:[ putCoinYellow (l[p[2]].x, l[p[2]].y) ] });
-			
-			bp.sync({ waitFor:[ putCoinYellow (l[p[3]].x, l[p[3]].y) ] });
-			bp.sync({ request:[ StaticEvents.YellowWin ] ,  block:[ redES, yellowES, redESCoin, yellowESCoin ] }, 100);
-		}
-	});
-	
-	// Red player can win in the next move 
-	bp.registerBThread("MoveToWinRed(<" + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
-			
-			bp.sync({ waitFor:[ putCoinRed (l[p[0]].x, l[p[0]].y) ] });
-			bp.sync({ waitFor:[ putCoinRed(l[p[1]].x, l[p[1]].y) ] });
-			bp.sync({ waitFor:[ putCoinRed (l[p[2]].x, l[p[2]].y) ] });
-			
-			bp.log.info("Red - One move to Win!");
-			// bp.sync({ request:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] }, 80);
-			bp.sync({ request: putInColRed(l[p[3]].y)}, 85);
-	});
-	// Red player can prevent yellow player from winning in the next move 
-	bp.registerBThread("PreventYellowFromWinning(<"  + l[p[0]].x + "," + l[p[0]].y + ">," + "<" + l[p[1]].x + "," + l[p[1]].y + ">," + "<" + l[p[2]].x + "," + l[p[2]].y + ">," + "<" + l[p[3]].x + "," + l[p[3]].y + ">)", function() {
-			bp.sync({ waitFor:[ putCoinYellow(l[p[0]].x, l[p[0]].y) ] });
-			bp.sync({ waitFor:[ putCoinYellow(l[p[1]].x, l[p[1]].y) ] });
-			
-			bp.sync({ waitFor:[ putCoinYellow(l[p[2]].x, l[p[2]].y) ] });
-			
-			bp.log.info("Red - Prevent opponent win!!" + " (" + l[p[3]].x + "," + l[p[3]].y + ")" );
-			//bp.sync({ request:[ putCoinRed(l[p[3]].x, l[p[3]].y) ] }, 70);
-		
-			bp.sync({ request:putInColRed(l[p[3]].y)}, 80);
-	});
-	
-}
-*/
-
-/*
-var lines = [];
-for(var i = 0; i < 3; i++ ) { 
-	for(var j = 0; j < 4; j++) {
-		lines.push( [ { x : i, y : j } , { x : i, y : j+1 } , { x : i, y : j+2 } , { x : i, y : j+3 } ] );
-		lines.push( [ { x : i, y : j } , { x : i + 1, y : j } , { x : i + 2, y : j } , { x : i + 3, y : j } ] );
-	}
-}
-for(var i = 0; i < 6; i++ ) { 
-	for(var j = 0; j < 4; j++) {
-		if( i <= 2 && j <= 3 ) {
-			lines.push( [ { x : i, y : j } , { x : i + 1, y : j+1 } , { x : i + 2, y : j+2 } , { x : i + 3, y : j+3 } ] );
-		}
-		else {
-			lines.push( [ { x : i, y : j } , { x : i - 1, y : j+1 } , { x : i - 2, y : j+2 } , { x : i - 3, y : j+3 } ] );
-		}
-	}
-}
-var perms = [ [ 0, 1, 2, 3 ], [ 0, 1, 3, 2 ], [ 0, 2, 1, 3 ], [ 0, 2, 3, 1 ], [ 0, 3, 1, 2 ], [ 0, 3, 2, 1 ],
+let allFours=[];
+let perms = [ [ 0, 1, 2, 3 ], [ 0, 1, 3, 2 ], [ 0, 2, 1, 3 ], [ 0, 2, 3, 1 ], [ 0, 3, 1, 2 ], [ 0, 3, 2, 1 ],
               [ 1, 0, 2, 3 ], [ 1, 0, 3, 2 ], [ 1, 2, 0, 3 ], [ 1, 2, 3, 0 ], [ 1, 3, 0, 2 ], [ 1, 3, 2, 0 ],
 			  [ 2, 1, 0, 3 ], [ 2, 1, 3, 0 ], [ 2, 0, 1, 3 ], [ 2, 0, 3, 1 ], [ 2, 3, 1, 0 ], [ 2, 3, 0, 1 ],
-			  [ 3, 1, 2, 0 ], [ 3, 1, 0, 2 ], [ 3, 2, 1, 0 ], [ 3, 2, 0, 1 ], [ 3, 0, 1, 2 ], [ 3, 0, 2, 1 ]];
-lines.forEach(function(l) {
-	perms.forEach(function(p) {
-		addLinePermutationBthreads(l, p);
-	});
-});
-*/
+              [ 3, 1, 2, 0 ], [ 3, 1, 0, 2 ], [ 3, 2, 1, 0 ], [ 3, 2, 0, 1 ], [ 3, 0, 1, 2 ], [ 3, 0, 2, 1 ]];
+              
+for(var i = 0; i < 3; i++ ) { 
+	for(var j = 0; j < 4; j++) {
+        let zero = {row: i, col:j};
+        let one = {row: i, col:j+1};
+        let two = {row: i, col:j+2};
+        let three = {row: i, col:j+3};
+        allFours.push( [ zero, one, two, three ] );
+        allFours.push( [ zero, one, three, two ] );
+        allFours.push( [ zero, two, one, three ] );
+        allFours.push( [ zero, two, three, one ] );
+        allFours.push( [ zero, three, two, one ] );
+        allFours.push( [ zero, three, one, two ] );
+
+        allFours.push( [ one, zero, two, three ] );
+        allFours.push( [ one, zero, three, two ] );
+        allFours.push( [ one, two, zero, three ] );
+        allFours.push( [ one, two, three, zero ] );
+        allFours.push( [ one, three, zero, two ] );
+        allFours.push( [ one, three, two, zero ] );
+
+        allFours.push( [ two, one, zero, three ] );
+        allFours.push( [ two, one, three, zero ] );
+        allFours.push( [ two, zero, one, three ] );
+        allFours.push( [ two, zero, three, one ] );
+        allFours.push( [ two, three, one, zero] );
+        allFours.push( [ two, three, zero,one ] );
+
+        allFours.push( [ three, one, two, zero ] );
+        allFours.push( [ three, one, zero, two ] );
+        allFours.push( [ three, two, one, zero ] );
+        allFours.push( [ three, two, zero, one ] );
+        allFours.push( [ three, zero, two, one ] );
+        allFours.push( [ three, zero, one, two ] );
+
+
+        zero = {row: i, col:j};
+        one = {row: i+1, col:j};
+        two = {row: i+2, col:j};
+        three = {row: i+3, col:j};
+        allFours.push( [ zero, one, two, three ] );
+        allFours.push( [ zero, one, three, two ] );
+        allFours.push( [ zero, two, one, three ] );
+        allFours.push( [ zero, two, three, one ] );
+        allFours.push( [ zero, three, two, one ] );
+        allFours.push( [ zero, three, one, two ] );
+
+        allFours.push( [ one, zero, two, three ] );
+        allFours.push( [ one, zero, three, two ] );
+        allFours.push( [ one, two, zero, three ] );
+        allFours.push( [ one, two, three, zero ] );
+        allFours.push( [ one, three, zero, two ] );
+        allFours.push( [ one, three, two, zero ] );
+
+        allFours.push( [ two, one, zero, three ] );
+        allFours.push( [ two, one, three, zero ] );
+        allFours.push( [ two, zero, one, three ] );
+        allFours.push( [ two, zero, three, one ] );
+        allFours.push( [ two, three, one, zero] );
+        allFours.push( [ two, three, zero,one ] );
+
+        allFours.push( [ three, one, two, zero ] );
+        allFours.push( [ three, one, zero, two ] );
+        allFours.push( [ three, two, one, zero ] );
+        allFours.push( [ three, two, zero, one ] );
+        allFours.push( [ three, zero, two, one ] );
+        allFours.push( [ three, zero, one, two ] );
+
+	}
+}
+
+for(var i = 3; i < 6; i++ ) { 
+	for(var j = 0; j < 4; j++) {
+        let zero = {row: i, col:j};
+        let one = {row: i, col:j+1};
+        let two = {row: i, col:j+2};
+        let three = {row: i, col:j+3};
+        allFours.push( [ zero, one, two, three ] );
+        allFours.push( [ zero, one, three, two ] );
+        allFours.push( [ zero, two, one, three ] );
+        allFours.push( [ zero, two, three, one ] );
+        allFours.push( [ zero, three, two, one ] );
+        allFours.push( [ zero, three, one, two ] );
+
+        allFours.push( [ one, zero, two, three ] );
+        allFours.push( [ one, zero, three, two ] );
+        allFours.push( [ one, two, zero, three ] );
+        allFours.push( [ one, two, three, zero ] );
+        allFours.push( [ one, three, zero, two ] );
+        allFours.push( [ one, three, two, zero ] );
+
+        allFours.push( [ two, one, zero, three ] );
+        allFours.push( [ two, one, three, zero ] );
+        allFours.push( [ two, zero, one, three ] );
+        allFours.push( [ two, zero, three, one ] );
+        allFours.push( [ two, three, one, zero] );
+        allFours.push( [ two, three, zero,one ] );
+
+        allFours.push( [ three, one, two, zero ] );
+        allFours.push( [ three, one, zero, two ] );
+        allFours.push( [ three, two, one, zero ] );
+        allFours.push( [ three, two, zero, one ] );
+        allFours.push( [ three, zero, two, one ] );
+        allFours.push( [ three, zero, one, two ] );
+	}
+}
+
+for(var i = 0; i < 3; i++ ) { 
+	for(var j = 4; j < 7; j++) {
+        
+        let zero = {row: i, col:j};
+        let one = {row: i+1, col:j};
+        let two = {row: i+2, col:j};
+        let three = {row: i+3, col:j};
+        allFours.push( [ zero, one, two, three ] );
+        allFours.push( [ zero, one, three, two ] );
+        allFours.push( [ zero, two, one, three ] );
+        allFours.push( [ zero, two, three, one ] );
+        allFours.push( [ zero, three, two, one ] );
+        allFours.push( [ zero, three, one, two ] );
+
+        allFours.push( [ one, zero, two, three ] );
+        allFours.push( [ one, zero, three, two ] );
+        allFours.push( [ one, two, zero, three ] );
+        allFours.push( [ one, two, three, zero ] );
+        allFours.push( [ one, three, zero, two ] );
+        allFours.push( [ one, three, two, zero ] );
+
+        allFours.push( [ two, one, zero, three ] );
+        allFours.push( [ two, one, three, zero ] );
+        allFours.push( [ two, zero, one, three ] );
+        allFours.push( [ two, zero, three, one ] );
+        allFours.push( [ two, three, one, zero] );
+        allFours.push( [ two, three, zero,one ] );
+
+        allFours.push( [ three, one, two, zero ] );
+        allFours.push( [ three, one, zero, two ] );
+        allFours.push( [ three, two, one, zero ] );
+        allFours.push( [ three, two, zero, one ] );
+        allFours.push( [ three, zero, two, one ] );
+        allFours.push( [ three, zero, one, two ] );
+	}
+}
+
+
+for(var i = 0; i < 6; i++ ) { 
+	for(var j = 0; j < 4; j++) {
+		if( i <= 2 && j <= 3 ) {
+            let zero = {row: i, col:j};
+            let one = {row: i+1, col:j+2};
+            let two = {row: i+2, col:j+2};
+            let three = {row: i+3, col:j+3};
+            allFours.push( [ zero, one, two, three ] );
+            allFours.push( [ zero, one, three, two ] );
+            allFours.push( [ zero, two, one, three ] );
+            allFours.push( [ zero, two, three, one ] );
+            allFours.push( [ zero, three, two, one ] );
+            allFours.push( [ zero, three, one, two ] );
+    
+            allFours.push( [ one, zero, two, three ] );
+            allFours.push( [ one, zero, three, two ] );
+            allFours.push( [ one, two, zero, three ] );
+            allFours.push( [ one, two, three, zero ] );
+            allFours.push( [ one, three, zero, two ] );
+            allFours.push( [ one, three, two, zero ] );
+    
+            allFours.push( [ two, one, zero, three ] );
+            allFours.push( [ two, one, three, zero ] );
+            allFours.push( [ two, zero, one, three ] );
+            allFours.push( [ two, zero, three, one ] );
+            allFours.push( [ two, three, one, zero] );
+            allFours.push( [ two, three, zero,one ] );
+    
+            allFours.push( [ three, one, two, zero ] );
+            allFours.push( [ three, one, zero, two ] );
+            allFours.push( [ three, two, one, zero ] );
+            allFours.push( [ three, two, zero, one ] );
+            allFours.push( [ three, zero, two, one ] );
+            allFours.push( [ three, zero, one, two ] );
+		}
+		else {
+            let zero = {row: i, col:j};
+            let one = {row: i-1, col:j+1};
+            let two = {row: i-2, col:j+2};
+            let three = {row:i-3, col:j+3};
+            allFours.push( [ zero, one, two, three ] );
+            allFours.push( [ zero, one, three, two ] );
+            allFours.push( [ zero, two, one, three ] );
+            allFours.push( [ zero, two, three, one ] );
+            allFours.push( [ zero, three, two, one ] );
+            allFours.push( [ zero, three, one, two ] );
+    
+            allFours.push( [ one, zero, two, three ] );
+            allFours.push( [ one, zero, three, two ] );
+            allFours.push( [ one, two, zero, three ] );
+            allFours.push( [ one, two, three, zero ] );
+            allFours.push( [ one, three, zero, two ] );
+            allFours.push( [ one, three, two, zero ] );
+    
+            allFours.push( [ two, one, zero, three ] );
+            allFours.push( [ two, one, three, zero ] );
+            allFours.push( [ two, zero, one, three ] );
+            allFours.push( [ two, zero, three, one ] );
+            allFours.push( [ two, three, one, zero] );
+            allFours.push( [ two, three, zero,one ] );
+    
+            allFours.push( [ three, one, two, zero ] );
+            allFours.push( [ three, one, zero, two ] );
+            allFours.push( [ three, two, one, zero ] );
+            allFours.push( [ three, two, zero, one ] );
+            allFours.push( [ three, zero, two, one ] );
+            allFours.push( [ three, zero, one, two ] );
+		}
+	}
+}
+
+//rules for fours
+let len = allFours.length; // number of fours 
+let i = 0;
+for(i = 0; i < len; i++) {
+    let currentFour = allFours[i];
+    bp.registerBThread("Detect yellow win" + "[" + "(" +  currentFour[0].row + "," + currentFour[0].col + ")" + " ; " + 
+    "(" +  currentFour[1].row + "," + currentFour[1].col + ")" + " ; " + 
+    "(" +  currentFour[2].row + "," + currentFour[2].col + ")" + " ; " + 
+    "(" +  currentFour[3].row + "," + currentFour[3].col + ")" + "]" , function() { 
+        let coinOfFour = currentFour.map(cell => putCoin(cell.row,cell.col,"Yellow")); // This is an array of 4 coin placemmt events - in order to win one have to fill all 4 
+        for(var j = 0; j < 4; j++) {
+            bp.sync({waitFor: coinOfFour[j]}); // waiting for all four events to be performed - it's a win 
+        }
+        bp.sync({request:StaticEvents.YellowWin, block: moves });
+    })
+}
+
+i = 0; 
+for(i = 0; i < len; i++) {
+    let currentFour = allFours[i];
+    bp.registerBThread("Detect red win" + "[" + "(" +  currentFour[0].row + "," + currentFour[0].col + ")" + " ; " + 
+    "(" +  currentFour[1].row + "," + currentFour[1].col + ")" + " ; " + 
+    "(" +  currentFour[2].row + "," + currentFour[2].col + ")" + " ; " + 
+    "(" +  currentFour[3].row + "," + currentFour[3].col + ")" + "]" , function() { 
+        let coinOfFour = currentFour.map(cell => putCoin(cell.row,cell.col,"Red")); // This is an array of 4 coin placemmt events - in order to win one have to fill all 4 
+        for(var j = 0; j < 4; j++) {
+            bp.sync({waitFor: coinOfFour[j]}); // waiting for all four events to be performed - it's a win 
+        }
+        bp.sync({request:StaticEvents.RedWin, block: moves});
+    })
+}
+
+
+
+
  
 
 bp.registerBThread("CenterCol", function() {
@@ -378,7 +453,6 @@ bp.registerBThread("boardUpdate", function() {
 		
 		for(var i = 0; i < 6; i++) {
 			bp.log.info(board[i][0] + "  " + board[i][1] + "  " + board[i][2] + "  " + board[i][3] + "  " + board[i][4] + "  " + board[i][5] + "  " + board[i][6]);
-			//bp.log.info(board[i]);
 		}
 	}
 });
